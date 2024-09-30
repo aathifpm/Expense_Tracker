@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expenses Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://kit.fontawesome.com/your-fontawesome-kit.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-wallet"></i> Expenses Tracker</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <p class="{{ category }}">{{ message }}</p>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <div class="content-wrapper">
+            <div class="main-content">
+                <a href="{{ url_for('add_expense') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Add New Expense</a>
+                <div class="card">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Amount</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for expense in expenses %}
+                            <tr>
+                                <td>{{ expense[1] }}</td>
+                                <td><i class="fas fa-{{ get_category_icon(expense[2]) }}"></i> {{ expense[2] }}</td>
+                                <td>${{ "%.2f" | format(expense[3]) }}</td>
+                                <td>{{ expense[4] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="total">Total Expenses: ${{ "%.2f" | format(total) }}</p>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary"><i class="fas fa-chart-line"></i> View Dashboard</a>
+            </div>
+            <div class="spending-analysis">
+                <h2><i class="fas fa-chart-pie"></i> Spending Analysis</h2>
+                <canvas id="spendingChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <script>
+        var ctx = document.getElementById('spendingChart').getContext('2d');
+        var chart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: JSON.parse('{{ spending_analysis.keys() | list | tojson | safe }}'),
+                datasets: [{
+                    data: JSON.parse('{{ spending_analysis.values() | list | tojson | safe }}'),
+                    backgroundColor: [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Spending by Category'
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
