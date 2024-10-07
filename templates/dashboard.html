@@ -20,11 +20,20 @@
             </div>
             <div class="card">
                 <h2><i class="fas fa-chart-pie"></i> Spending by Category</h2>
-                <canvas id="categoryChart"></canvas>
+                <div class="chart-container">
+                    <canvas id="categoryChart"></canvas>
+                </div>
             </div>
             <div class="card">
                 <h2><i class="fas fa-chart-line"></i> Monthly Expenses Trend</h2>
-                <canvas id="trendChart"></canvas>
+                <div class="time-range-buttons">
+                    <button id="3months">3 Months</button>
+                    <button id="6months">6 Months</button>
+                    <button id="12months" class="active">1 Year</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="trendChart"></canvas>
+                </div>
             </div>
             <div class="card">
                 <h2><i class="fas fa-receipt"></i> Recent Expenses</h2>
@@ -38,7 +47,14 @@
                     {% endfor %}
                 </div>
             </div>
-
+            <div class="card">
+                <h2><i class="fas fa-crystal-ball"></i> Next Month Prediction</h2>
+                <p>{{ next_month_prediction }}</p>
+            </div>
+            <div class="card">
+                <h2><i class="fas fa-comment-dollar"></i> Financial Advice</h2>
+                <p>{{ financial_advice }}</p>
+            </div>
         </div>
         <a href="{{ url_for('index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Expenses List</a>
     </div>
@@ -71,17 +87,32 @@
         });
 
         // Trend Chart
-        var ctxTrend = document.getElementById('trendChart').getContext('2d');
-        new Chart(ctxTrend, {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        const monthlyData = JSON.parse('{{ monthly_expenses | tojson | safe }}');
+        
+        const labels = monthlyData.map(item => item[0]);
+        const expenses = monthlyData.map(item => item[1]);
+        const movingAvg = monthlyData.map(item => item[2]);
+
+        const trendChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: JSON.parse('{{ monthly_expenses | map(attribute=0) | list | tojson | safe }}'),
-                datasets: [{
-                    label: 'Monthly Expenses',
-                    data: JSON.parse('{{ monthly_expenses | map(attribute=1) | list | tojson | safe }}'),
-                    borderColor: primaryColor,
-                    tension: 0.1
-                }]
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Monthly Expenses',
+                        data: expenses,
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1
+                    },
+                    {
+                        label: '3-Month Moving Average',
+                        data: movingAvg,
+                        borderColor: 'rgb(255, 99, 132)',
+                        borderDash: [5, 5],
+                        tension: 0.1
+                    }
+                ]
             },
             options: {
                 responsive: true,
@@ -89,12 +120,73 @@
                     x: {
                         type: 'time',
                         time: {
-                            unit: 'month'
+                            unit: 'month',
+                            displayFormats: {
+                                month: 'MMM YYYY'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Month'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Expenses ($)'
+                        },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
                         }
                     }
                 }
             }
         });
+
+        // Time range buttons functionality
+        document.getElementById('3months').addEventListener('click', () => {
+            updateChartRange(3);
+            setActiveButton(3);
+        });
+        document.getElementById('6months').addEventListener('click', () => {
+            updateChartRange(6);
+            setActiveButton(6);
+        });
+        document.getElementById('12months').addEventListener('click', () => {
+            updateChartRange(12);
+            setActiveButton(12);
+        });
+
+        function updateChartRange(months) {
+            fetch(`/api/monthly_expenses/${months}`)
+                .then(response => response.json())
+                .then(data => {
+                    trendChart.data.labels = data.map(item => item[0]);
+                    trendChart.data.datasets[0].data = data.map(item => item[1]);
+                    trendChart.data.datasets[1].data = data.map(item => item[2]);
+                    trendChart.update();
+                });
+        }
+
+        // Update active button style
+        function setActiveButton(months) {
+            document.querySelectorAll('.time-range-buttons button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(months + 'months').classList.add('active');
+        }
     </script>
 </body>
 </html>

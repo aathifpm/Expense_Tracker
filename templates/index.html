@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://kit.fontawesome.com/your-fontawesome-kit.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -20,9 +21,24 @@
         {% endwith %}
         <div class="content-wrapper">
             <div class="main-content">
-                <a href="{{ url_for('add_expense') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Add New Expense</a>
+                <div class="action-bar">
+                    <a href="{{ url_for('add_expense') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Add New Expense</a>
+                    <div class="filter-sort">
+                        <select id="category-filter">
+                            <option value="">All Categories</option>
+                            {% for category in categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                            {% endfor %}
+                        </select>
+                        <select id="sort-by">
+                            <option value="date">Sort by Date</option>
+                            <option value="amount">Sort by Amount</option>
+                            <option value="category">Sort by Category</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="card">
-                    <table>
+                    <table id="expenses-table">
                         <thead>
                             <tr>
                                 <th>Date</th>
@@ -34,25 +50,39 @@
                         <tbody>
                             {% for expense in expenses %}
                             <tr>
-                                <td>{{ expense[1] }}</td>
-                                <td><i class="fas fa-{{ get_category_icon(expense[2]) }}"></i> {{ expense[2] }}</td>
-                                <td>${{ "%.2f" | format(expense[3]) }}</td>
-                                <td>{{ expense[4] }}</td>
+                                <td>{{ expense.date }}</td>
+                                <td><i class="fas fa-{{ get_category_icon(expense.category) }}"></i> {{ expense.category }}</td>
+                                <td>${{ "%.2f" | format(expense.amount) }}</td>
+                                <td>{{ expense.description }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
-                <p class="total">Total Expenses: ${{ "%.2f" | format(total) }}</p>
+                <div class="pagination">
+                    <button id="prev-page" class="btn btn-secondary"><i class="fas fa-chevron-left"></i> Previous</button>
+                    <span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
+                    <button id="next-page" class="btn btn-secondary">Next <i class="fas fa-chevron-right"></i></button>
+                </div>
+                <p class="total">Total Expenses: $<span id="total-amount">{{ "%.2f" | format(total) }}</span></p>
                 <a href="{{ url_for('dashboard') }}" class="btn btn-secondary"><i class="fas fa-chart-line"></i> View Dashboard</a>
             </div>
-            <div class="spending-analysis">
-                <h2><i class="fas fa-chart-pie"></i> Spending Analysis</h2>
-                <canvas id="spendingChart"></canvas>
+            <div class="sidebar">
+                <div class="card">
+                    <h2><i class="fas fa-chart-pie"></i> Spending Analysis</h2>
+                    <canvas id="spendingChart"></canvas>
+                </div>
+                <div class="card monthly-summary">
+                    <h2><i class="fas fa-calendar-alt"></i> Monthly Summary</h2>
+                    <p>This Month's Total: <span id="this-month-total">${{ "%.2f"|format(this_month_total) }}</span></p>
+                    <p>Avg. Daily Spending: <span id="avg-daily-spending">${{ "%.2f"|format(avg_daily_spending) }}</span></p>
+                    <p>Top Category: <span id="top-category">{{ top_category }}</span></p>
+                </div>
             </div>
         </div>
     </div>
     <script>
+        // Spending Analysis Chart
         var ctx = document.getElementById('spendingChart').getContext('2d');
         var chart = new Chart(ctx, {
             type: 'pie',
@@ -74,6 +104,116 @@
                     }
                 }
             }
+        });
+
+        // Filtering, Sorting, and Pagination
+        $(document).ready(function() {
+            var expenses = JSON.parse('{{ expenses | tojson | safe }}');
+            var itemsPerPage = 10;
+            var currentPage = 1;
+
+            function updateTable() {
+                var categoryFilter = $('#category-filter').val();
+                var sortBy = $('#sort-by').val();
+                
+                var filteredExpenses = expenses.filter(function(expense) {
+                    return categoryFilter === '' || expense.category === categoryFilter;
+                });
+
+                filteredExpenses.sort(function(a, b) {
+                    if (sortBy === 'date') return new Date(b.date) - new Date(a.date);
+                    if (sortBy === 'amount') return b.amount - a.amount;
+                    if (sortBy === 'category') return a.category.localeCompare(b.category);
+                    return 0;
+                });
+
+                var totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
+                $('#total-pages').text(totalPages);
+                $('#current-page').text(currentPage);
+
+                var start = (currentPage - 1) * itemsPerPage;
+                var end = start + itemsPerPage;
+                var pageExpenses = filteredExpenses.slice(start, end);
+
+                var tbody = $('#expenses-table tbody');
+                tbody.empty();
+                pageExpenses.forEach(function(expense) {
+                    tbody.append(`
+                        <tr>
+                            <td>${expense.date}</td>
+                            <td><i class="fas fa-${getIcon(expense.category)}"></i> ${expense.category}</td>
+                            <td>$${expense.amount.toFixed(2)}</td>
+                            <td>${expense.description}</td>
+                        </tr>
+                    `);
+                });
+
+                updateMonthlySummary(filteredExpenses);
+                updateTotalAmount(filteredExpenses);
+            }
+
+            function getIcon(category) {
+                var icons = {
+                    'Food': 'utensils',
+                    'Transportation': 'car',
+                    'Housing': 'home',
+                    'Utilities': 'bolt',
+                    'Entertainment': 'film',
+                    'Other': 'question'
+                };
+                return icons[category] || 'tag';
+            }
+
+            function updateMonthlySummary(filteredExpenses) {
+                var now = new Date();
+                var thisMonth = now.getMonth();
+                var thisYear = now.getFullYear();
+                
+                var thisMonthExpenses = filteredExpenses.filter(function(expense) {
+                    var expenseDate = new Date(expense.date);
+                    return expenseDate.getMonth() === thisMonth && expenseDate.getFullYear() === thisYear;
+                });
+
+                var thisMonthTotal = thisMonthExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+                var avgDailySpending = thisMonthTotal / now.getDate();
+
+                var categoryCounts = {};
+                thisMonthExpenses.forEach(function(expense) {
+                    categoryCounts[expense.category] = (categoryCounts[expense.category] || 0) + expense.amount;
+                });
+                var topCategory = Object.keys(categoryCounts).reduce((a, b) => categoryCounts[a] > categoryCounts[b] ? a : b, 'N/A');
+
+                $('#this-month-total').text('$' + thisMonthTotal.toFixed(2));
+                $('#avg-daily-spending').text('$' + avgDailySpending.toFixed(2));
+                $('#top-category').text(topCategory);
+            }
+
+            function updateTotalAmount(filteredExpenses) {
+                var total = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+                $('#total-amount').text(total.toFixed(2));
+            }
+
+            $('#category-filter, #sort-by').change(function() {
+                currentPage = 1;
+                updateTable();
+            });
+
+            $('#prev-page').click(function() {
+                if (currentPage > 1) {
+                    currentPage--;
+                    updateTable();
+                }
+            });
+
+            $('#next-page').click(function() {
+                var totalPages = Math.ceil(expenses.length / itemsPerPage);
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    updateTable();
+                }
+            });
+
+            updateTable();
         });
     </script>
 </body>

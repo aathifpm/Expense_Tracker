@@ -6,6 +6,7 @@
     <title>Add Expense</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://kit.fontawesome.com/your-fontawesome-kit.js" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -43,10 +44,34 @@
                     <textarea id="description" name="description" required></textarea>
                 </div>
 
+                <div id="category-suggestion" style="display: none;">
+                    Suggested category: <span id="suggested-category"></span>
+                </div>
+
                 <button type="submit" class="btn btn-primary">Add Expense</button>
             </form>
         </div>
         <a href="{{ url_for('index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Expenses List</a>
     </div>
+    <script>
+        $(document).ready(function() {
+            $('#description').on('blur', function() {
+                var description = $(this).val();
+                if (description) {
+                    $.ajax({
+                        url: '/api/suggest_category',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({description: description}),
+                        success: function(response) {
+                            $('#suggested-category').text(response.suggested_category);
+                            $('#category-suggestion').show();
+                            $('#category').val(response.suggested_category);
+                        }
+                    });
+                }
+            });
+        });
+    </script>
 </body>
 </html>
