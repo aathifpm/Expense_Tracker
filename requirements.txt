@@ -1,0 +1,16 @@
+Flask
+pgmpy
+networkx
+scikit-fuzzy
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+spacy
+python-dateutil
+Werkzeug
+Jinja2
+itsdangerous
+click
+MarkupSafe
